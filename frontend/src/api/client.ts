@@ -4,6 +4,8 @@ import type {
   DepersonalizeTextResponse,
   DepersonalizeFileResponse,
   ModelInfo,
+  ModelsListResponse,
+  SwitchModelResponse,
   HealthResponse,
 } from "./types";
 
@@ -19,6 +21,18 @@ export async function healthCheck(): Promise<HealthResponse> {
 
 export async function getModelInfo(): Promise<ModelInfo> {
   const { data } = await api.get("/model");
+  return data;
+}
+
+export async function listModels(): Promise<ModelsListResponse> {
+  const { data } = await api.get("/models");
+  return data;
+}
+
+export async function switchModel(
+  modelName: string,
+): Promise<SwitchModelResponse> {
+  const { data } = await api.post("/models/switch", { model_name: modelName });
   return data;
 }
 

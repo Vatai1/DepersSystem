@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { FileText, Upload, History, Shield } from "lucide-react";
+import ModelSelector from "./ModelSelector";
 import "./Layout.css";
 
 const links = [
@@ -31,6 +32,7 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+        <ModelSelector />
       </aside>
       <main className="main-content">
         <Outlet />

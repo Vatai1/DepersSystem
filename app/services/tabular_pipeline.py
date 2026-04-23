@@ -1,8 +1,7 @@
-import tempfile
-import os
 from pathlib import Path
 
 import pandas as pd
+
 from app.services.text_pipeline import depersonalize_text
 
 

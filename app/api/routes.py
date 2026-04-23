@@ -2,14 +2,15 @@ import os
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.core import settings, logger
+from app.core import settings
+from app.core.config import MODEL_REGISTRY
+from app.services.file_pipeline import process_file
 from app.services.model_manager import model_manager
 from app.services.text_pipeline import depersonalize_text
-from app.services.file_pipeline import process_file
 
 router = APIRouter(prefix="/api")
 
@@ -19,6 +20,10 @@ class TextRequest(BaseModel):
     mode: str = "replace"
 
 
+class SwitchModelRequest(BaseModel):
+    model_name: str
+
+
 @router.get("/health")
 async def health():
     return {"status": "ok", "model_loaded": model_manager.is_loaded}
@@ -26,12 +31,35 @@ async def health():
 
 @router.get("/model")
 async def get_model_info():
-    return {
-        "name": settings.model_name,
-        "loaded": model_manager.is_loaded,
-        "device": settings.device,
-        "languages": ["ru", "en"],
-    }
+    return model_manager.get_info()
+
+
+@router.get("/models")
+async def list_models():
+    current = model_manager.model_name
+    models = []
+    for name, info in MODEL_REGISTRY.items():
+        models.append(
+            {
+                "model_name": name,
+                "display_name": info.get("display_name", name),
+                "description": info.get("description", ""),
+                "size": info.get("size", ""),
+                "scheme": info.get("scheme", "standard"),
+                "is_active": name == current,
+            }
+        )
+    return {"models": models, "active": current}
+
+
+@router.post("/models/switch")
+async def switch_model(req: SwitchModelRequest):
+    if req.model_name not in MODEL_REGISTRY:
+        return {"error": f"Unknown model: {req.model_name}"}
+    if req.model_name == model_manager.model_name and model_manager.is_loaded:
+        return {"status": "already_active", "model": model_manager.get_info()}
+    model_manager.load(req.model_name)
+    return {"status": "switched", "model": model_manager.get_info()}
 
 
 @router.post("/depersonalize/text")

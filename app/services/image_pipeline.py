@@ -1,10 +1,6 @@
-import tempfile
 import os
 
-from PIL import Image, ImageFilter
 import cv2
-
-from app.core import logger
 
 
 def _blur_regions(image_path: str, regions: list[dict], mode: str) -> str:

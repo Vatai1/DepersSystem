@@ -1,8 +1,9 @@
 import re
 
-from app.core.patterns import ALL_PATTERNS, REPLACEMENTS, MASK_CHARS
-from app.services.model_manager import model_manager
+from app.core.patterns import ALL_PATTERNS, MASK_CHARS, REPLACEMENTS, scan_geo
 from app.services.fake_generator import fake_generator
+from app.services.model_manager import model_manager
+from app.services.name_gazetteer import scan_names
 
 
 def _ranges_overlap(a_start: int, a_end: int, b_start: int, b_end: int) -> bool:
@@ -21,58 +22,68 @@ _REGEX_LABELS = {
 }
 
 
-def _merge_entities(ml_entities: list[dict], regex_entities: list[dict]) -> list[dict]:
-    all_entities = ml_entities + regex_entities
-    all_entities.sort(key=lambda x: (x["start"], -(x["end"] - x["start"])))
+def _merge_entities(
+    ml_entities: list[dict],
+    regex_entities: list[dict],
+    gazetteer_entities: list[dict] | None = None,
+    geo_entities: list[dict] | None = None,
+) -> list[dict]:
+    if gazetteer_entities is None:
+        gazetteer_entities = []
+    if geo_entities is None:
+        geo_entities = []
 
-    regex_spans = set()
-    for e in regex_entities:
-        regex_spans.add((e["start"], e["end"]))
+    regex_spans = [(e["start"], e["end"]) for e in regex_entities]
 
     filtered_ml = []
     for e in ml_entities:
-        dominated_by_regex = False
+        dominated = False
         for rs, re_ in regex_spans:
             if _ranges_overlap(e["start"], e["end"], rs, re_):
-                dominated_by_regex = True
+                dominated = True
                 break
-        if not dominated_by_regex:
+        if not dominated:
             filtered_ml.append(e)
 
-    combined = regex_entities + filtered_ml
-    combined.sort(key=lambda x: (x["start"], -(x["end"] - x["start"])))
+    ml_spans = [(e["start"], e["end"]) for e in filtered_ml]
+    regex_ml_spans = regex_spans + ml_spans
+
+    filtered_gaz = []
+    for e in gazetteer_entities:
+        dominated = False
+        for rs, re_ in regex_ml_spans:
+            if _ranges_overlap(e["start"], e["end"], rs, re_):
+                dominated = True
+                break
+        if not dominated:
+            filtered_gaz.append(e)
+
+    gaz_spans = [(e["start"], e["end"]) for e in filtered_gaz]
+    all_spans = regex_ml_spans + gaz_spans
+
+    filtered_geo = []
+    for e in geo_entities:
+        dominated = False
+        for rs, re_ in all_spans:
+            if _ranges_overlap(e["start"], e["end"], rs, re_):
+                dominated = True
+                break
+        if not dominated:
+            filtered_geo.append(e)
+
+    all_entities = regex_entities + filtered_ml + filtered_gaz + filtered_geo
+    all_entities.sort(key=lambda x: x["start"])
 
     result = []
-    for e in combined:
-        dominated = False
+    for e in all_entities:
+        overlaps = False
         for existing in result:
             if _ranges_overlap(e["start"], e["end"], existing["start"], existing["end"]):
-                existing_len = existing["end"] - existing["start"]
-                current_len = e["end"] - e["start"]
-                e_is_regex = e["label"] in _REGEX_LABELS
-                ex_is_regex = existing["label"] in _REGEX_LABELS
-                if e_is_regex and not ex_is_regex:
-                    pass
-                elif current_len <= existing_len:
-                    dominated = True
-                    break
-        if not dominated:
-            result_new = []
-            for existing in result:
-                if _ranges_overlap(e["start"], e["end"], existing["start"], existing["end"]):
-                    existing_len = existing["end"] - existing["start"]
-                    current_len = e["end"] - e["start"]
-                    e_is_regex = e["label"] in _REGEX_LABELS
-                    ex_is_regex = existing["label"] in _REGEX_LABELS
-                    if e_is_regex and not ex_is_regex:
-                        continue
-                    if current_len > existing_len:
-                        continue
-                result_new.append(existing)
-            result_new.append(e)
-            result = result_new
+                overlaps = True
+                break
+        if not overlaps:
+            result.append(e)
 
-    result.sort(key=lambda x: x["start"])
     return result
 
 
@@ -120,11 +131,72 @@ def _apply_mode(text: str, entities: list[dict], mode: str) -> str:
     return text
 
 
+_STREET_LEFT_CTX = {
+    "ул",
+    "пр",
+    "проспект",
+    "бульвар",
+    "переулок",
+    "шоссе",
+    "пл",
+    "площадь",
+    "набережная",
+    "проезд",
+    "наб",
+    "пер",
+}
+
+
+def _filter_loc_after_street(entities: list[dict], text: str) -> list[dict]:
+    result = []
+    for e in entities:
+        if e["label"] == "LOC":
+            before = text[: e["start"]].rstrip()
+            if before:
+                last_word = before.split()[-1].lower().rstrip(".,")
+                if last_word in _STREET_LEFT_CTX:
+                    continue
+        result.append(e)
+    return result
+
+
+_LOC_GAP_RE = re.compile(r"^[-\s]*(?:на[-\s]+)?$")
+
+
+def _merge_adjacent_same_label(entities: list[dict], text: str) -> list[dict]:
+    if not entities:
+        return entities
+    result = [dict(entities[0])]
+    for e in entities[1:]:
+        prev = result[-1]
+        if e["label"] != prev["label"]:
+            result.append(dict(e))
+            continue
+        gap = text[prev["end"] : e["start"]]
+        if e["label"] == "LOC" and _LOC_GAP_RE.match(gap) and len(gap) <= 6:
+            prev["end"] = e["end"]
+            prev["text"] = text[prev["start"] : e["end"]]
+            prev["score"] = max(prev["score"], e["score"])
+            continue
+        if e["start"] - prev["end"] <= 1:
+            prev["end"] = e["end"]
+            prev["text"] = text[prev["start"] : e["end"]]
+            prev["score"] = max(prev["score"], e["score"])
+            continue
+        result.append(dict(e))
+    return result
+
+
 def depersonalize_text(text: str, mode: str = "replace") -> dict:
     fake_generator.reset()
     ml_entities = model_manager.predict(text)
     regex_entities = _regex_scan(text)
-    entities = _merge_entities(ml_entities, regex_entities)
+    gazetteer_entities = scan_names(text)
+    geo_entities = scan_geo(text)
+    entities = _merge_entities(ml_entities, regex_entities, gazetteer_entities, geo_entities)
+    entities = _filter_loc_after_street(entities, text)
+    entities.sort(key=lambda x: x["start"])
+    entities = _merge_adjacent_same_label(entities, text)
 
     processed = _apply_mode(text, entities, mode)
 

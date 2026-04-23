@@ -1,11 +1,12 @@
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from app.core import settings, logger
 from app.api.routes import router
+from app.core import logger
 from app.services.model_manager import model_manager
 
 
@@ -35,7 +36,6 @@ app.add_middleware(
 app.include_router(router)
 
 static_dir = "frontend/dist"
-import os
 
 if os.path.isdir(static_dir):
     from fastapi.responses import FileResponse

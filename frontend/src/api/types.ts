@@ -4,6 +4,7 @@ export interface PiiEntity {
   start: number;
   end: number;
   score: number;
+  per_parts?: { text: string; role: string }[];
 }
 
 export interface DepersonalizeTextRequest {
@@ -33,10 +34,31 @@ export interface DepersonalizeFileResponse {
 }
 
 export interface ModelInfo {
-  name: string;
-  loaded: boolean;
-  device: string;
-  languages: string[];
+  model_name: string;
+  display_name?: string;
+  description?: string;
+  size?: string;
+  scheme: string;
+  is_loaded: boolean;
+}
+
+export interface ModelListItem {
+  model_name: string;
+  display_name: string;
+  description: string;
+  size: string;
+  scheme: string;
+  is_active: boolean;
+}
+
+export interface ModelsListResponse {
+  models: ModelListItem[];
+  active: string;
+}
+
+export interface SwitchModelResponse {
+  status: string;
+  model: ModelInfo;
 }
 
 export interface HealthResponse {

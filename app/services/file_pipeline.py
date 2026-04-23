@@ -1,10 +1,9 @@
 import os
-import tempfile
 from pathlib import Path
 
-from app.services.text_pipeline import depersonalize_text
+from app.core import logger, settings
 from app.services.tabular_pipeline import process_tabular
-from app.core import settings, logger
+from app.services.text_pipeline import depersonalize_text
 
 
 def _extract_text_from_txt(file_path: str) -> str:
@@ -110,7 +109,8 @@ def process_file(file_path: str, mode: str = "replace") -> dict:
             ),
             "entities": entities,
             "stats": {"total_entities": len(entities), "by_type": by_type},
-            "download_url": f"/api/download/{os.path.basename(file_path).replace(Path(file_path).suffix, '_depersonalized.png')}",
+            "download_url": "/api/download/"
+            + os.path.basename(file_path).replace(Path(file_path).suffix, "_depersonalized.png"),
         }
 
     extractor = _EXTRACTORS.get(ext, _extract_text_from_txt)

@@ -176,7 +176,184 @@ CITIES = [
     "Пермь",
     "Тюмень",
     "Ижевск",
+    "Барнаул",
+    "Иркутск",
+    "Хабаровск",
+    "Ярославль",
+    "Владивосток",
+    "Махачкала",
+    "Томск",
+    "Оренбург",
+    "Кемерово",
+    "Новокузнецк",
+    "Рязань",
+    "Астрахань",
+    "Пенза",
+    "Липецк",
+    "Тула",
+    "Киров",
+    "Чебоксары",
+    "Калининград",
+    "Брянск",
+    "Курск",
+    "Магнитогорск",
+    "Ульяновск",
+    "Тверь",
+    "Ставрополь",
+    "Белгород",
+    "Сочи",
+    "Архангельск",
+    "Владимир",
+    "Смоленск",
+    "Калуга",
+    "Чита",
+    "Мурманск",
+    "Тамбов",
+    "Петрозаводск",
+    "Кострома",
+    "Нижневартовск",
+    "Новороссийск",
+    "Сургут",
+    "Вологда",
+    "Череповец",
+    "Владикавказ",
+    "Орёл",
+    "Нальчик",
+    "Грозный",
+    "Берлин",
+    "Париж",
+    "Лондон",
+    "Рим",
+    "Мадрид",
+    "Вена",
+    "Варшава",
+    "Прага",
+    "Будапешт",
+    "Бухарест",
+    "София",
+    "Афины",
+    "Стокгольм",
+    "Осло",
+    "Хельсинки",
+    "Копенгаген",
+    "Брюссель",
+    "Амстердам",
+    "Лиссабон",
+    "Дублин",
+    "Цюрих",
+    "Женева",
+    "Мюнхен",
+    "Гамбург",
+    "Франкфурт",
+    "Барселона",
+    "Милан",
+    "Неаполь",
+    "Турин",
+    "Токио",
+    "Сеул",
+    "Пекин",
+    "Шанхай",
+    "Гонконг",
+    "Сингапур",
+    "Бангкок",
+    "Манила",
+    "Ханой",
+    "Дели",
+    "Мумбаи",
+    "Дубай",
+    "Стамбул",
+    "Анкара",
+    "Каир",
+    "Тель-Авив",
+    "Торонто",
+    "Ванкувер",
+    "Монреаль",
+    "Сидней",
+    "Мельбурн",
+    "Киев",
+    "Минск",
+    "Алматы",
+    "Астана",
+    "Ташкент",
+    "Баку",
+    "Ереван",
+    "Бишкек",
+    "Харьков",
+    "Одесса",
+    "Днепр",
+    "Львов",
+    "Запорожье",
+    "Николаев",
+    "Мариуполь",
+    "Винница",
+    "Херсон",
+    "Полтава",
+    "Чернигов",
+    "Черкассы",
+    "Житомир",
+    "Сумы",
+    "Ровно",
+    "Тернополь",
+    "Ужгород",
+    "Луцк",
+    "Черновцы",
+    "Хмельницкий",
+    "Кропивницкий",
+    "Кременчуг",
+    "Бердянск",
+    "Мелитополь",
+    "Ивано-Франковск",
+    "Борисполь",
+    "Бровары",
+    "Буча",
+    "Ирпень",
+    "Ялта",
+    "Севастополь",
+    "Симферополь",
+    "Евпатория",
+    "Керчь",
 ]
+
+
+def _decline_city(base: str, original: str) -> str:
+    if base.endswith("ск"):
+        if original.endswith("ском"):
+            return base + "ом"
+        if original.endswith("ска"):
+            return base + "а"
+        if original.endswith("ску"):
+            return base + "у"
+        if original.endswith("ске"):
+            return base + "е"
+        return base
+    if base.endswith("бург"):
+        if original.endswith("бургом"):
+            return base + "ом"
+        if original.endswith("бурга"):
+            return base + "а"
+        if original.endswith("бургу"):
+            return base + "у"
+        if original.endswith("бурге"):
+            return base + "е"
+        return base
+    if base.endswith("а"):
+        if original.endswith("ой"):
+            return base[:-1] + "ой"
+        if original.endswith("ы"):
+            return base[:-1] + "ы"
+        if original.endswith("е"):
+            return base[:-1] + "е"
+        if original.endswith("у"):
+            return base[:-1] + "у"
+        return base
+    if base.endswith("ь"):
+        if original.endswith("и"):
+            return base[:-1] + "и"
+        if original.endswith("ю"):
+            return base[:-1] + "ю"
+        return base
+    return base
+
 
 EMAIL_DOMAINS = [
     "mail.ru",
@@ -388,7 +565,9 @@ class FakeGenerator:
     def replace_loc(self, original: str) -> str:
         key = original.strip()
         if key not in self._address_map:
-            self._address_map[key] = _pick(CITIES)
+            base = _pick(CITIES)
+            declined = _decline_city(base, key)
+            self._address_map[key] = declined
         return self._address_map[key]
 
     def replace_phone(self, original: str) -> str:
@@ -416,7 +595,10 @@ class FakeGenerator:
         key = original.strip()
         if key not in self._snils_map:
             self._snils_map[key] = (
-                f"{random.randint(100, 999)}-{random.randint(100, 999)}-{random.randint(100, 999)} {random.randint(10, 99)}"
+                f"{random.randint(100, 999)}-"
+                f"{random.randint(100, 999)}-"
+                f"{random.randint(100, 999)} "
+                f"{random.randint(10, 99)}"
             )
         return self._snils_map[key]
 
@@ -432,7 +614,10 @@ class FakeGenerator:
         key = original.strip()
         if key not in self._card_map:
             self._card_map[key] = (
-                f"{random.randint(1000, 9999)}-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}"
+                f"{random.randint(1000, 9999)}-"
+                f"{random.randint(1000, 9999)}-"
+                f"{random.randint(1000, 9999)}-"
+                f"{random.randint(1000, 9999)}"
             )
         return self._card_map[key]
 
@@ -452,7 +637,10 @@ class FakeGenerator:
             "CARD": self.replace_card,
             "DATE": lambda x: "01.01.2000",
             "IP": lambda x: (
-                f"{random.randint(1, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
+                f"{random.randint(1, 255)}."
+                f"{random.randint(0, 255)}."
+                f"{random.randint(0, 255)}."
+                f"{random.randint(1, 254)}"
             ),
         }
         fn = dispatch.get(label, lambda x: f"[{label}]")
