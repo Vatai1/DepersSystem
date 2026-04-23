@@ -1,0 +1,20 @@
+services:
+  depers-sys:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+    environment:
+      - DEPERS_MODEL_NAME=Davlan/distilbert-base-multilingual-cased-ner-hrl
+      - DEPERS_DEVICE=cpu
+      - DEPERS_HOST=0.0.0.0
+      - DEPERS_PORT=8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
