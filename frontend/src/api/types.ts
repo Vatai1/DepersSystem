@@ -21,6 +21,7 @@ export interface DepersonalizeTextResponse {
     total_entities: number;
     by_type: Record<string, number>;
   };
+  key: string | null;
 }
 
 export interface DepersonalizeFileResponse {
@@ -31,6 +32,33 @@ export interface DepersonalizeFileResponse {
     by_type: Record<string, number>;
   };
   download_url: string;
+  key: string | null;
+}
+
+export interface RepersonalizeTextRequest {
+  text: string;
+  key: string;
+}
+
+export interface RepersonalizeTextResponse {
+  original_text: string;
+  key: string;
+}
+
+export interface RepersonalizeFileResponse {
+  original_text: string;
+  key: string;
+  download_url: string;
+}
+
+export interface VaultKeyInfo {
+  key: string;
+  entity_count: number;
+  created_at: string;
+}
+
+export interface VaultListResponse {
+  keys: VaultKeyInfo[];
 }
 
 export interface ModelInfo {

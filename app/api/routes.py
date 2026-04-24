@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.core import settings
 from app.core.config import MODEL_REGISTRY
 from app.services.file_pipeline import process_file
+from app.services.mapping_store import mapping_store
 from app.services.model_manager import model_manager
 from app.services.text_pipeline import depersonalize_text
 
@@ -22,6 +23,11 @@ class TextRequest(BaseModel):
 
 class SwitchModelRequest(BaseModel):
     model_name: str
+
+
+class RepersonalizeTextRequest(BaseModel):
+    text: str
+    key: str
 
 
 @router.get("/health")
@@ -89,6 +95,63 @@ async def depersonalize_file_endpoint(
                 os.unlink(tmp_path)
             except OSError:
                 pass
+
+
+@router.post("/repersonalize/text")
+async def repersonalize_text_endpoint(req: RepersonalizeTextRequest):
+    restored = mapping_store.repersonalize_text(req.text, req.key)
+    if restored is None:
+        return {"error": "Key not found or expired"}
+    return {"original_text": restored, "key": req.key}
+
+
+@router.post("/repersonalize/file")
+async def repersonalize_file_endpoint(
+    file: UploadFile = File(...),
+    key: str = Form(...),
+):
+    os.makedirs(settings.data_dir, exist_ok=True)
+    suffix = Path(file.filename or "file.txt").suffix
+    with tempfile.NamedTemporaryFile(dir=settings.data_dir, suffix=suffix, delete=False) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        with open(tmp_path, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
+
+        restored = mapping_store.repersonalize_text(text, key)
+        if restored is None:
+            return {"error": "Key not found or expired"}
+
+        out_path = tmp_path.replace(suffix, f"_repersonalized{suffix}")
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(restored)
+
+        return {
+            "original_text": restored,
+            "key": key,
+            "download_url": f"/api/download/{os.path.basename(out_path)}",
+        }
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+@router.get("/vault")
+async def list_vault_keys():
+    return {"keys": mapping_store.list_keys()}
+
+
+@router.delete("/vault/{key}")
+async def delete_vault_key(key: str):
+    deleted = mapping_store.delete(key)
+    if not deleted:
+        return {"error": "Key not found"}
+    return {"status": "deleted"}
 
 
 @router.get("/download/{filename}")

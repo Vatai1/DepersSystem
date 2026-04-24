@@ -2,6 +2,7 @@ import re
 
 from app.core.patterns import ALL_PATTERNS, MASK_CHARS, REPLACEMENTS, scan_geo
 from app.services.fake_generator import fake_generator
+from app.services.mapping_store import mapping_store
 from app.services.model_manager import model_manager
 from app.services.name_gazetteer import scan_names
 
@@ -147,14 +148,30 @@ _STREET_LEFT_CTX = {
 }
 
 
-def _filter_loc_after_street(entities: list[dict], text: str) -> list[dict]:
+def _mark_street_entities(entities: list[dict], text: str) -> list[dict]:
     result = []
     for e in entities:
         if e["label"] == "LOC":
+            inner = e["text"].lower()
+            first_word = inner.split()[0].rstrip(".,") if inner.split() else ""
+            if first_word in _STREET_LEFT_CTX or first_word.rstrip("еёомой"):
+                root = first_word
+                for prefix in _STREET_LEFT_CTX:
+                    if root.startswith(prefix):
+                        result.append({**e, "label": "STREET"})
+                        break
+                else:
+                    pass
+                if result and result[-1] is not e and result[-1].get("label") == "STREET":
+                    continue
             before = text[: e["start"]].rstrip()
             if before:
                 last_word = before.split()[-1].lower().rstrip(".,")
-                if last_word in _STREET_LEFT_CTX:
+                if last_word in _STREET_LEFT_CTX or any(
+                    last_word.startswith(p) and len(last_word) - len(p) <= 3
+                    for p in _STREET_LEFT_CTX
+                ):
+                    result.append({**e, "label": "STREET"})
                     continue
         result.append(e)
     return result
@@ -194,11 +211,17 @@ def depersonalize_text(text: str, mode: str = "replace") -> dict:
     gazetteer_entities = scan_names(text)
     geo_entities = scan_geo(text)
     entities = _merge_entities(ml_entities, regex_entities, gazetteer_entities, geo_entities)
-    entities = _filter_loc_after_street(entities, text)
+    entities = _mark_street_entities(entities, text)
     entities.sort(key=lambda x: x["start"])
     entities = _merge_adjacent_same_label(entities, text)
 
     processed = _apply_mode(text, entities, mode)
+
+    key = None
+    if mode == "fake":
+        reverse = fake_generator.get_reverse_mapping()
+        if reverse:
+            key = mapping_store.save(reverse)
 
     by_type = {}
     for e in entities:
@@ -209,4 +232,5 @@ def depersonalize_text(text: str, mode: str = "replace") -> dict:
         "processed_text": processed,
         "entities": entities,
         "stats": {"total_entities": len(entities), "by_type": by_type},
+        "key": key,
     }

@@ -3,10 +3,14 @@ import type {
   DepersonalizeTextRequest,
   DepersonalizeTextResponse,
   DepersonalizeFileResponse,
+  RepersonalizeTextRequest,
+  RepersonalizeTextResponse,
+  RepersonalizeFileResponse,
   ModelInfo,
   ModelsListResponse,
   SwitchModelResponse,
   HealthResponse,
+  VaultListResponse,
 } from "./types";
 
 const api = axios.create({
@@ -59,4 +63,35 @@ export async function depersonalizeFile(
 export async function downloadResult(url: string): Promise<Blob> {
   const { data } = await api.get(url, { responseType: "blob" });
   return data;
+}
+
+export async function repersonalizeText(
+  text: string,
+  key: string,
+): Promise<RepersonalizeTextResponse> {
+  const req: RepersonalizeTextRequest = { text, key };
+  const { data } = await api.post("/repersonalize/text", req);
+  return data;
+}
+
+export async function repersonalizeFile(
+  file: File,
+  key: string,
+): Promise<RepersonalizeFileResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("key", key);
+  const { data } = await api.post("/repersonalize/file", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function listVaultKeys(): Promise<VaultListResponse> {
+  const { data } = await api.get("/vault");
+  return data;
+}
+
+export async function deleteVaultKey(key: string): Promise<void> {
+  await api.delete(`/vault/${key}`);
 }

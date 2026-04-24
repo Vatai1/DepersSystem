@@ -124,4 +124,5 @@ def process_file(file_path: str, mode: str = "replace") -> dict:
         "entities": result["entities"],
         "stats": result["stats"],
         "download_url": f"/api/download/{os.path.basename(out_path)}",
+        "key": result.get("key"),
     }
