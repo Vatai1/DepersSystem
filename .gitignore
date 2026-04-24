@@ -12,3 +12,5 @@ build/
 .pytest_cache/
 node_modules/
 frontend/dist/
+scripts/*.json
+scripts/*.tmp
