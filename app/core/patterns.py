@@ -10,6 +10,8 @@ PASSPORT = re.compile(r"\b\d{4}\s\d{6}\b")
 CARD = re.compile(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
 DATE_RU = re.compile(r"\b\d{1,2}[./]\d{1,2}[./]\d{2,4}\b")
 IP_ADDRESS = re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
+DRIVER_LICENSE = re.compile(r"\b\d{2}\s\d{2}\s\d{6}\b")
+OMS = re.compile(r"\b\d{16}\b")
 
 _GEO_PATTERN = re.compile(
     r"(?:г\.?\s*|город\s*)("
@@ -37724,6 +37726,8 @@ ALL_PATTERNS = {
     "CARD": CARD,
     "DATE": DATE_RU,
     "IP": IP_ADDRESS,
+    "DRIVER_LICENSE": DRIVER_LICENSE,
+    "OMS": OMS,
 }
 
 
@@ -37772,6 +37776,8 @@ REPLACEMENTS = {
     "DATE": "[ДАТА]",
     "IP": "[IP]",
     "STREET": "[УЛИЦА]",
+    "DRIVER_LICENSE": "[ВУ]",
+    "OMS": "[ОМС]",
 }
 
 MASK_CHARS = {
@@ -37789,4 +37795,6 @@ MASK_CHARS = {
     "CARD": lambda m: re.sub(r"\d", "X", m.group()),
     "DATE": lambda m: re.sub(r"\d", "X", m.group()),
     "IP": lambda m: re.sub(r"\d", "X", m.group()),
+    "DRIVER_LICENSE": lambda m: re.sub(r"\d", "X", m.group()),
+    "OMS": lambda m: re.sub(r"\d", "X", m.group()),
 }

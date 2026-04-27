@@ -1,8 +1,10 @@
+import json
 import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
@@ -18,11 +20,23 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down DepersSys...")
 
 
+class UnicodeJSONResponse(JSONResponse):
+    def render(self, content) -> bytes:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=None,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+
 app = FastAPI(
     title="DepersSys",
     description="Local AI-based data depersonalization system",
     version="0.1.0",
     lifespan=lifespan,
+    default_response_class=UnicodeJSONResponse,
 )
 
 app.add_middleware(

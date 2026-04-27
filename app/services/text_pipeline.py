@@ -20,6 +20,8 @@ _REGEX_LABELS = {
     "CARD",
     "DATE",
     "IP",
+    "DRIVER_LICENSE",
+    "OMS",
 }
 
 
