@@ -10,7 +10,7 @@ PASSPORT = re.compile(r"\b\d{4}\s\d{6}\b")
 CARD = re.compile(r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b")
 DATE_RU = re.compile(r"\b\d{1,2}[./]\d{1,2}[./]\d{2,4}\b")
 IP_ADDRESS = re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
-DRIVER_LICENSE = re.compile(r"\b\d{2}\s\d{2}\s\d{6}\b")
+DRIVER_LICENSE = re.compile(r"\b(?:\d{2}\s\d{2}|\d{4})\s\d{6}\b")
 OMS = re.compile(r"\b\d{16}\b")
 
 _GEO_PATTERN = re.compile(
@@ -37731,6 +37731,154 @@ ALL_PATTERNS = {
 }
 
 
+_CASE_ENDINGS_M = ("ом", "у", "е", "а", "ы", "ов", "ев", "ей", "ёв", "ём")
+_CASE_ENDINGS_F = ("ой", "ою", "у", "е", "и", "ю", "ёй")
+_CASE_ENDINGS_N = ("а", "у", "ом", "е", "ы", "и")
+_CASE_ENDINGS_PL = ("ах", "ях", "ами", "ями", "ов", "ев", "ей")
+_ALL_ENDINGS = _CASE_ENDINGS_M + _CASE_ENDINGS_F + _CASE_ENDINGS_N + _CASE_ENDINGS_PL
+
+
+def _decline_city_name(city: str) -> list[str]:
+    forms = [city.lower()]
+    lower = city.lower()
+    if lower.endswith("а"):
+        base = lower[:-1]
+        forms.extend(base + e for e in ("ы", "е", "у", "ой", "ою"))
+    elif lower.endswith("я"):
+        base = lower[:-1]
+        forms.extend(base + e for e in ("и", "е", "ю", "ей", "ёй"))
+    elif lower.endswith("ь"):
+        base = lower[:-1]
+        forms.extend(base + e for e in ("и", "ю"))
+    elif lower.endswith("о"):
+        base = lower[:-1]
+        forms.extend(base + e for e in ("а", "у", "ом", "е"))
+    elif lower.endswith("е"):
+        base = lower[:-1]
+        forms.extend(base + e for e in ("а", "у", "ом"))
+    elif lower.endswith("ск"):
+        forms.extend(lower + e for e in ("а", "у", "ом", "е"))
+    elif lower.endswith("бург"):
+        forms.extend(lower + e for e in ("а", "у", "ом", "е"))
+    elif lower[-1] not in "уеыаоэяиюь":
+        forms.extend(lower + e for e in ("а", "у", "ом", "е", "ы", "ов", "ев"))
+    return forms
+
+
+def _build_city_stems(cities: list[str]) -> dict[str, str]:
+    stems: dict[str, str] = {}
+    for city in cities:
+        for form in _decline_city_name(city):
+            if form not in stems:
+                stems[form] = city
+    return stems
+
+
+def _build_multiword_stems(cities: list[str]) -> dict[str, str]:
+    stems: dict[str, str] = {}
+    for city in cities:
+        lower = city.lower()
+        stems[lower] = city
+        parts = city.split()
+        if len(parts) >= 2:
+            first_forms = _decline_city_name(parts[0])
+            rest = " ".join(parts[1:]).lower()
+            for ff in first_forms:
+                key = ff + " " + rest
+                if key not in stems:
+                    stems[key] = city
+        elif "-" in city:
+            hyphen_parts = city.split("-")
+            if len(hyphen_parts) >= 2:
+                first_forms = _decline_city_name(hyphen_parts[0])
+                rest = "-".join(hyphen_parts[1:]).lower()
+                for ff in first_forms:
+                    key = ff + "-" + rest
+                    if key not in stems:
+                        stems[key] = city
+    return stems
+
+
+_CITY_STEMS = _build_city_stems(GEO_REGEX_WORDS)
+_MULTIWORD_STEMS = _build_multiword_stems(MULTI_WORD_CITIES)
+
+
+def _scan_geo_stems(text: str, seen: set) -> list[dict]:
+    entities = []
+    prefix_re = re.compile(
+        r"(?:г\.?\s*|город\s*|в\s+|на\s+|под\s+|из\s+|до\s+|к\s+|по\s+|от\s+|около\s+|возле\s+|близ\s+)",
+        re.IGNORECASE,
+    )
+    words = list(re.finditer(r"[А-ЯЁа-яё][А-ЯЁа-яё\-]+", text))
+    for w in words:
+        span = (w.start(), w.end())
+        if any(s <= span[0] < e or s < span[1] <= e for s, e in seen):
+            continue
+        word = w.group()
+        lower = word.lower()
+        if lower in _CITY_STEMS:
+            entities.append(
+                {
+                    "text": word,
+                    "label": "LOC",
+                    "start": w.start(),
+                    "end": w.end(),
+                    "score": 0.95,
+                    "source": "geo_stem",
+                }
+            )
+            seen.add(span)
+            continue
+        before = text[: w.start()].rstrip()
+        has_prefix = False
+        if before:
+            last_bit = before[-30:]
+            if prefix_re.search(last_bit):
+                has_prefix = True
+        if not has_prefix:
+            continue
+        for i in range(1, min(5, len(lower))):
+            stem = lower[:-i]
+            if stem in _CITY_STEMS:
+                entities.append(
+                    {
+                        "text": word,
+                        "label": "LOC",
+                        "start": w.start(),
+                        "end": w.end(),
+                        "score": 0.9,
+                        "source": "geo_stem",
+                    }
+                )
+                seen.add(span)
+                break
+    return entities
+
+
+def _scan_multiword_stems(text: str, seen: set) -> list[dict]:
+    entities = []
+    candidates = re.finditer(r"[А-ЯЁа-яё]+(?:[\-\s]+[А-ЯЁа-яё]+){1,6}", text)
+    for t in candidates:
+        span = (t.start(), t.end())
+        if any(s <= span[0] < e or s < span[1] <= e for s, e in seen):
+            continue
+        phrase = t.group().strip()
+        lower = phrase.lower()
+        if lower in _MULTIWORD_STEMS:
+            entities.append(
+                {
+                    "text": phrase,
+                    "label": "LOC",
+                    "start": t.start(),
+                    "end": t.end(),
+                    "score": 0.95,
+                    "source": "geo_stem",
+                }
+            )
+            seen.add(span)
+    return entities
+
+
 def scan_geo(text: str) -> list[dict]:
     entities = []
     seen = set()
@@ -37763,6 +37911,8 @@ def scan_geo(text: str) -> list[dict]:
                     "source": "geo_pattern",
                 }
             )
+    entities.extend(_scan_geo_stems(text, seen))
+    entities.extend(_scan_multiword_stems(text, seen))
     return entities
 
 
